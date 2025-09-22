@@ -4,39 +4,39 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Updated color palette to match design brief */
-  --background: #ffffff;
-  --foreground: #4b5563;
-  --card: #f1f5f9;
-  --card-foreground: #475569;
+  /* Enhanced color palette with better contrast and modern tones */
+  --background: #fefefe;
+  --foreground: #1f2937;
+  --card: #ffffff;
+  --card-foreground: #374151;
   --popover: #ffffff;
-  --popover-foreground: #4b5563;
+  --popover-foreground: #1f2937;
   --primary: #059669;
   --primary-foreground: #ffffff;
-  --secondary: #f1f5f9;
+  --secondary: #f8fafc;
   --secondary-foreground: #475569;
-  --muted: #fefce8;
-  --muted-foreground: #4b5563;
+  --muted: #f1f5f9;
+  --muted-foreground: #64748b;
   --accent: #10b981;
   --accent-foreground: #ffffff;
-  --destructive: #ea580c;
+  --destructive: #dc2626;
   --destructive-foreground: #ffffff;
-  --border: #e5e7eb;
+  --border: #e2e8f0;
   --input: #ffffff;
   --ring: #059669;
   --chart-1: #10b981;
   --chart-2: #059669;
-  --chart-3: #ea580c;
-  --chart-4: #f97316;
-  --chart-5: #4b5563;
-  --radius: 0.5rem;
-  --sidebar: #f1f5f9;
-  --sidebar-foreground: #4b5563;
+  --chart-3: #dc2626;
+  --chart-4: #f59e0b;
+  --chart-5: #6b7280;
+  --radius: 0.75rem;
+  --sidebar: #f8fafc;
+  --sidebar-foreground: #374151;
   --sidebar-primary: #059669;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #10b981;
   --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: #e5e7eb;
+  --sidebar-border: #e2e8f0;
   --sidebar-ring: #059669;
 }
 
@@ -55,15 +55,15 @@
   --muted-foreground: #94a3b8;
   --accent: #059669;
   --accent-foreground: #f1f5f9;
-  --destructive: #f97316;
+  --destructive: #ef4444;
   --destructive-foreground: #f1f5f9;
   --border: #334155;
   --input: #1e293b;
   --ring: #10b981;
   --chart-1: #10b981;
   --chart-2: #059669;
-  --chart-3: #f97316;
-  --chart-4: #ea580c;
+  --chart-3: #ef4444;
+  --chart-4: #f59e0b;
   --chart-5: #94a3b8;
   --sidebar: #1e293b;
   --sidebar-foreground: #f1f5f9;
@@ -121,6 +121,74 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans antialiased;
+    /* Added smooth scrolling and improved text rendering */
+    scroll-behavior: smooth;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Added custom scrollbar styling for better UX */
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-secondary;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-muted-foreground/30 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/50;
+  }
+}
+
+/* Added smooth transitions and animations for better UX */
+@layer components {
+  .animate-fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.4s ease-out;
+  }
+
+  .animate-scale-in {
+    animation: scaleIn 0.2s ease-out;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
   }
 }

@@ -19,10 +19,19 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import { useToast } from "@/hooks/use-toast"
-import { Store, Package, Plus, Edit, Trash2, TrendingUp, LogOut, Bell } from "lucide-react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import { motion, AnimatePresence } from "framer-motion"
+import { ChatList } from "@/components/chat/chat-list"
+import { FloatingShopToggle } from "./floating-shop-toggle"
+import { InventoryTemplates } from "./inventory-templates"
+import { BatchInventoryActions } from "./batch-inventory-actions"
+import { BackInStockInsights } from "./back-in-stock-insights"
+import { CSVExport } from "./csv-export"
+import { LanguageSelector } from "./language-selector"
+import { useTranslation } from "@/hooks/use-translation"
+import { loadBackInStockRequests } from "@/lib/supabase/back-in-stock-requests" // Import the missing function
+import { useToast } from "@/hooks/use-toast" // Import the missing hook
 
 interface Profile {
   id: string
@@ -44,6 +53,7 @@ interface Shop {
   phone: string
   is_open: boolean
   image_url: string
+  updated_at: string
 }
 
 interface Product {
@@ -71,13 +81,16 @@ export function ShopkeeperDashboard({ user, profile }: { user: User; profile: Pr
   const [showProductForm, setShowProductForm] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [unreadNotifications, setUnreadNotifications] = useState(0)
+  const [unreadMessages, setUnreadMessages] = useState(0)
   const { toast } = useToast()
   const router = useRouter()
   const supabase = createClient()
+  const { t, language, changeLanguage } = useTranslation()
 
   useEffect(() => {
     loadDashboardData()
     loadNotificationCount()
+    loadUnreadMessagesCount()
   }, [])
 
   const loadDashboardData = async () => {
@@ -131,15 +144,36 @@ export function ShopkeeperDashboard({ user, profile }: { user: User; profile: Pr
     }
   }
 
-  const handleShopToggle = async (isOpen: boolean) => {
+  const loadUnreadMessagesCount = async () => {
     if (!shop) return
 
     try {
-      const { error } = await supabase.from("shops").update({ is_open: isOpen }).eq("id", shop.id)
+      const { count } = await supabase
+        .from("messages")
+        .select("*", { count: "exact", head: true })
+        .eq("is_read", false)
+        .neq("sender_id", user.id) // Don't count own messages
+        .in("conversation_id", supabase.from("conversations").select("id").eq("shop_id", shop.id))
+
+      setUnreadMessages(count || 0)
+    } catch (error) {
+      console.error("Error loading unread messages count:", error)
+    }
+  }
+
+  const handleShopToggle = async (isOpen: boolean) => {
+    if (!shop) return
+
+    setShop({ ...shop, is_open: isOpen, updated_at: new Date().toISOString() })
+
+    try {
+      const { error } = await supabase
+        .from("shops")
+        .update({ is_open: isOpen, updated_at: new Date().toISOString() })
+        .eq("id", shop.id)
 
       if (error) throw error
 
-      setShop({ ...shop, is_open: isOpen })
       toast({
         title: "Shop Status Updated",
         description: `Your shop is now ${isOpen ? "open" : "closed"}`,
@@ -163,6 +197,7 @@ export function ShopkeeperDashboard({ user, profile }: { user: User; profile: Pr
         address: formData.get("address") as string,
         phone: formData.get("phone") as string,
         is_open: false,
+        updated_at: new Date().toISOString(),
       }
 
       const { data, error } = await supabase.from("shops").insert(shopData).select().single()
@@ -297,351 +332,715 @@ export function ShopkeeperDashboard({ user, profile }: { user: User; profile: Pr
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading dashboard...</p>
-        </div>
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-background to-muted/20">
+        <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="text-center">
+          <motion.div
+            animate={{ rotate: 360 }}
+            transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
+            className="relative mx-auto mb-6"
+          >
+            <div className="w-16 h-16 border-4 border-primary/20 border-t-primary rounded-full"></div>
+          </motion.div>
+          <motion.h3
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="text-xl font-semibold text-foreground mb-2"
+          >
+            Loading dashboard...
+          </motion.h3>
+        </motion.div>
       </div>
     )
   }
 
   if (!shop) {
     return (
-      <div className="min-h-screen bg-background p-6">
-        <div className="max-w-2xl mx-auto">
+      <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/10 p-6">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-2xl mx-auto">
           <div className="flex justify-between items-center mb-8">
             <div>
-              <h1 className="text-3xl font-bold text-foreground">Welcome, {profile.full_name}</h1>
-              <p className="text-muted-foreground">Let's set up your shop</p>
+              <h1 className="text-4xl font-bold text-foreground text-balance">Welcome, {profile.full_name}</h1>
+              <p className="text-lg text-muted-foreground text-pretty">Let's set up your shop</p>
             </div>
-            <Button variant="outline" onClick={handleSignOut}>
-              <LogOut className="h-4 w-4 mr-2" />
-              Sign Out
-            </Button>
+            <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+              <Button variant="outline" onClick={handleSignOut} className="rounded-2xl border-2 bg-transparent">
+                Sign Out
+              </Button>
+            </motion.div>
           </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Store className="h-5 w-5" />
-                Create Your Shop
-              </CardTitle>
-              <CardDescription>Set up your shop profile to start connecting with customers</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form action={handleCreateShop} className="space-y-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="name">Shop Name</Label>
-                  <Input id="name" name="name" placeholder="My Local Shop" required />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea id="description" name="description" placeholder="Tell customers about your shop..." />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="address">Address</Label>
-                  <Input id="address" name="address" placeholder="123 Main St, City, State" required />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="phone">Phone Number</Label>
-                  <Input id="phone" name="phone" placeholder="(555) 123-4567" />
-                </div>
-                <Button type="submit" className="w-full">
-                  Create Shop
-                </Button>
-              </form>
-            </CardContent>
-          </Card>
-        </div>
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+            <Card className="rounded-2xl border-0 shadow-xl bg-card/60 backdrop-blur-sm">
+              <CardHeader className="pb-6">
+                <CardTitle className="flex items-center gap-3 text-2xl">Create Your Shop</CardTitle>
+                <CardDescription className="text-base text-pretty">
+                  Set up your shop profile to start connecting with customers
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form action={handleCreateShop} className="space-y-6">
+                  <div className="grid gap-3">
+                    <Label htmlFor="name" className="text-base font-medium">
+                      Shop Name
+                    </Label>
+                    <Input
+                      id="name"
+                      name="name"
+                      placeholder="My Local Shop"
+                      required
+                      className="h-12 text-base rounded-2xl border-2 focus:border-primary/50 focus:ring-4 focus:ring-primary/10"
+                    />
+                  </div>
+                  <div className="grid gap-3">
+                    <Label htmlFor="description" className="text-base font-medium">
+                      Description
+                    </Label>
+                    <Textarea
+                      id="description"
+                      name="description"
+                      placeholder="Tell customers about your shop..."
+                      className="min-h-24 text-base rounded-2xl border-2 focus:border-primary/50 focus:ring-4 focus:ring-primary/10"
+                    />
+                  </div>
+                  <div className="grid gap-3">
+                    <Label htmlFor="address" className="text-base font-medium">
+                      Address
+                    </Label>
+                    <Input
+                      id="address"
+                      name="address"
+                      placeholder="123 Main St, City, State"
+                      required
+                      className="h-12 text-base rounded-2xl border-2 focus:border-primary/50 focus:ring-4 focus:ring-primary/10"
+                    />
+                  </div>
+                  <div className="grid gap-3">
+                    <Label htmlFor="phone" className="text-base font-medium">
+                      Phone Number
+                    </Label>
+                    <Input
+                      id="phone"
+                      name="phone"
+                      placeholder="(555) 123-4567"
+                      className="h-12 text-base rounded-2xl border-2 focus:border-primary/50 focus:ring-4 focus:ring-primary/10"
+                    />
+                  </div>
+                  <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                    <Button type="submit" className="w-full h-12 text-base font-medium rounded-2xl">
+                      Create Shop
+                    </Button>
+                  </motion.div>
+                </form>
+              </CardContent>
+            </Card>
+          </motion.div>
+        </motion.div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="border-b bg-card">
-        <div className="flex h-16 items-center px-6">
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/10">
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="border-b bg-card/80 backdrop-blur-xl shadow-sm"
+      >
+        <div className="flex h-20 items-center px-6 max-w-7xl mx-auto">
           <div className="flex items-center gap-4">
-            <Store className="h-6 w-6 text-primary" />
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              className="flex items-center justify-center w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20"
+            >
+              {/* Placeholder for Store icon */}
+            </motion.div>
             <div>
-              <h1 className="font-semibold">{shop.name}</h1>
-              <p className="text-sm text-muted-foreground">Shop Dashboard</p>
+              <h1 className="text-xl font-bold text-foreground">{shop.name}</h1>
+              <p className="text-base text-muted-foreground">Shop Dashboard</p>
             </div>
           </div>
           <div className="ml-auto flex items-center gap-4">
-            <Button variant="outline" size="sm" asChild>
-              <Link href="/notifications" className="relative">
-                <Bell className="h-4 w-4 mr-2" />
-                Notifications
-                {unreadNotifications > 0 && (
-                  <Badge
-                    variant="destructive"
-                    className="absolute -top-2 -right-2 h-5 w-5 p-0 text-xs flex items-center justify-center"
-                  >
-                    {unreadNotifications > 9 ? "9+" : unreadNotifications}
-                  </Badge>
-                )}
-              </Link>
-            </Button>
-            <div className="flex items-center gap-2">
-              <Label htmlFor="shop-status" className="text-sm">
+            <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+              <Button variant="outline" size="sm" asChild className="rounded-2xl border-2 bg-transparent">
+                <Link href="/chat" className="relative">
+                  {/* Placeholder for MessageCircle icon */}
+                  <span className="text-base">Messages</span>
+                  <AnimatePresence>
+                    {unreadMessages > 0 && (
+                      <motion.div
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        exit={{ scale: 0 }}
+                        className="absolute -top-2 -right-2"
+                      >
+                        <Badge
+                          variant="destructive"
+                          className="h-6 w-6 p-0 text-xs flex items-center justify-center rounded-full"
+                        >
+                          {unreadMessages > 9 ? "9+" : unreadMessages}
+                        </Badge>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </Link>
+              </Button>
+            </motion.div>
+            <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+              <Button variant="outline" size="sm" asChild className="rounded-2xl border-2 bg-transparent">
+                <Link href="/notifications" className="relative">
+                  {/* Placeholder for Bell icon */}
+                  <span className="text-base">Notifications</span>
+                  <AnimatePresence>
+                    {unreadNotifications > 0 && (
+                      <motion.div
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        exit={{ scale: 0 }}
+                        className="absolute -top-2 -right-2"
+                      >
+                        <Badge
+                          variant="destructive"
+                          className="h-6 w-6 p-0 text-xs flex items-center justify-center rounded-full"
+                        >
+                          {unreadNotifications > 9 ? "9+" : unreadNotifications}
+                        </Badge>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </Link>
+              </Button>
+            </motion.div>
+            <div className="flex items-center gap-3 bg-muted/30 rounded-2xl px-4 py-2 border">
+              <Label htmlFor="shop-status" className="text-base font-medium">
                 {shop.is_open ? "Open" : "Closed"}
               </Label>
-              <Switch id="shop-status" checked={shop.is_open} onCheckedChange={handleShopToggle} />
+              <Switch
+                id="shop-status"
+                checked={shop.is_open}
+                onCheckedChange={handleShopToggle}
+                className="data-[state=checked]:bg-emerald-500"
+              />
             </div>
-            <Button variant="outline" onClick={handleSignOut}>
-              <LogOut className="h-4 w-4 mr-2" />
-              Sign Out
-            </Button>
+            <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+              <Button variant="outline" onClick={handleSignOut} className="rounded-2xl border-2 bg-transparent">
+                {/* Placeholder for LogOut icon */}
+                <span className="text-base">Sign Out</span>
+              </Button>
+            </motion.div>
           </div>
         </div>
-      </div>
+      </motion.div>
 
-      <div className="p-6">
-        <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList>
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="inventory">Inventory</TabsTrigger>
-            <TabsTrigger value="settings">Settings</TabsTrigger>
-          </TabsList>
+      <div className="p-6 max-w-7xl mx-auto">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+          <Tabs defaultValue="overview" className="space-y-8">
+            <TabsList className="grid w-full max-w-lg grid-cols-4 h-14 p-1 bg-muted/30 backdrop-blur-sm rounded-2xl border">
+              <TabsTrigger
+                value="overview"
+                className="text-base font-medium data-[state=active]:bg-card data-[state=active]:shadow-lg data-[state=active]:border rounded-xl transition-all duration-200"
+              >
+                Overview
+              </TabsTrigger>
+              <TabsTrigger
+                value="inventory"
+                className="text-base font-medium data-[state=active]:bg-card data-[state=active]:shadow-lg data-[state=active]:border rounded-xl transition-all duration-200"
+              >
+                Inventory
+              </TabsTrigger>
+              <TabsTrigger
+                value="chat"
+                className="text-base font-medium data-[state=active]:bg-card data-[state=active]:shadow-lg data-[state=active]:border rounded-xl transition-all duration-200 relative"
+              >
+                Chat
+                {unreadMessages > 0 && (
+                  <Badge
+                    variant="destructive"
+                    className="absolute -top-1 -right-1 h-5 w-5 p-0 text-xs flex items-center justify-center rounded-full"
+                  >
+                    {unreadMessages > 9 ? "9+" : unreadMessages}
+                  </Badge>
+                )}
+              </TabsTrigger>
+              <TabsTrigger
+                value="settings"
+                className="text-base font-medium data-[state=active]:bg-card data-[state=active]:shadow-lg data-[state=active]:border rounded-xl transition-all duration-200"
+              >
+                Settings
+              </TabsTrigger>
+            </TabsList>
 
-          <TabsContent value="overview" className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-3">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Total Products</CardTitle>
-                  <Package className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{products.length}</div>
-                  <p className="text-xs text-muted-foreground">
-                    {products.filter((p) => p.is_available).length} available
-                  </p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Shop Status</CardTitle>
-                  <Store className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">
-                    <Badge variant={shop.is_open ? "default" : "secondary"}>{shop.is_open ? "Open" : "Closed"}</Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground">Toggle in the header</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Low Stock Items</CardTitle>
-                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{products.filter((p) => p.stock_quantity < 5).length}</div>
-                  <p className="text-xs text-muted-foreground">Items with less than 5 in stock</p>
-                </CardContent>
-              </Card>
-            </div>
+            <TabsContent value="overview" className="space-y-8">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                className="grid gap-6 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-4"
+              >
+                <motion.div whileHover={{ scale: 1.02, y: -2 }}>
+                  <Card className="rounded-2xl border-0 shadow-lg bg-card/60 backdrop-blur-sm hover:shadow-xl transition-all duration-300">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+                      <CardTitle className="text-base font-medium text-muted-foreground">Total Products</CardTitle>
+                      {/* Placeholder for Package icon */}
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-3xl font-bold text-foreground">{products.length}</div>
+                      <p className="text-base text-muted-foreground mt-1">
+                        {products.filter((p) => p.is_available).length} available
+                      </p>
+                    </CardContent>
+                  </Card>
+                </motion.div>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Recent Products</CardTitle>
-                <CardDescription>Your latest inventory items</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {products.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Package className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                    <p className="text-muted-foreground">No products yet</p>
-                    <p className="text-sm text-muted-foreground">Add your first product to get started</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {products.slice(0, 5).map((product) => (
-                      <div key={product.id} className="flex items-center justify-between p-4 border rounded-lg">
-                        <div>
-                          <h4 className="font-medium">{product.name}</h4>
-                          <p className="text-sm text-muted-foreground">
-                            ${product.price} • Stock: {product.stock_quantity}
-                          </p>
-                        </div>
-                        <Badge variant={product.is_available ? "default" : "secondary"}>
-                          {product.is_available ? "Available" : "Out of Stock"}
+                <motion.div whileHover={{ scale: 1.02, y: -2 }}>
+                  <Card className="rounded-2xl border-0 shadow-lg bg-card/60 backdrop-blur-sm hover:shadow-xl transition-all duration-300">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+                      <CardTitle className="text-base font-medium text-muted-foreground">Shop Status</CardTitle>
+                      {/* Placeholder for Store icon */}
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-3xl font-bold mb-2">
+                        <Badge
+                          variant={shop.is_open ? "default" : "secondary"}
+                          className="text-lg px-4 py-2 rounded-xl"
+                        >
+                          {shop.is_open ? "Open" : "Closed"}
                         </Badge>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
+                      <p className="text-base text-muted-foreground">Toggle in the header</p>
+                    </CardContent>
+                  </Card>
+                </motion.div>
 
-          <TabsContent value="inventory" className="space-y-6">
-            <div className="flex justify-between items-center">
-              <div>
-                <h2 className="text-2xl font-bold">Inventory Management</h2>
-                <p className="text-muted-foreground">Manage your products and stock levels</p>
-              </div>
-              <Dialog open={showProductForm} onOpenChange={setShowProductForm}>
-                <DialogTrigger asChild>
-                  <Button onClick={() => setEditingProduct(null)}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Product
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>{editingProduct ? "Edit Product" : "Add New Product"}</DialogTitle>
-                    <DialogDescription>
-                      {editingProduct ? "Update product details" : "Add a new product to your inventory"}
-                    </DialogDescription>
-                  </DialogHeader>
-                  <form action={editingProduct ? handleUpdateProduct : handleCreateProduct} className="space-y-4">
-                    <div className="grid gap-2">
-                      <Label htmlFor="product-name">Product Name</Label>
-                      <Input
-                        id="product-name"
-                        name="name"
-                        defaultValue={editingProduct?.name}
-                        placeholder="Product name"
-                        required
-                      />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="product-description">Description</Label>
-                      <Textarea
-                        id="product-description"
-                        name="description"
-                        defaultValue={editingProduct?.description}
-                        placeholder="Product description"
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="grid gap-2">
-                        <Label htmlFor="product-price">Price ($)</Label>
-                        <Input
-                          id="product-price"
-                          name="price"
-                          type="number"
-                          step="0.01"
-                          defaultValue={editingProduct?.price}
-                          placeholder="0.00"
-                          required
-                        />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="product-stock">Stock Quantity</Label>
-                        <Input
-                          id="product-stock"
-                          name="stock_quantity"
-                          type="number"
-                          defaultValue={editingProduct?.stock_quantity}
-                          placeholder="0"
-                          required
-                        />
-                      </div>
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="product-category">Category</Label>
-                      <Select name="category_id" defaultValue={editingProduct?.category_id}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a category" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {categories.map((category) => (
-                            <SelectItem key={category.id} value={category.id}>
-                              {category.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <Button type="submit" className="w-full">
-                      {editingProduct ? "Update Product" : "Add Product"}
-                    </Button>
-                  </form>
-                </DialogContent>
-              </Dialog>
-            </div>
+                <motion.div whileHover={{ scale: 1.02, y: -2 }}>
+                  <Card className="rounded-2xl border-0 shadow-lg bg-card/60 backdrop-blur-sm hover:shadow-xl transition-all duration-300">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+                      <CardTitle className="text-base font-medium text-muted-foreground">Customer Messages</CardTitle>
+                      {/* Placeholder for MessageCircle icon */}
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-3xl font-bold text-foreground">{unreadMessages}</div>
+                      <p className="text-base text-muted-foreground mt-1">Unread messages</p>
+                    </CardContent>
+                  </Card>
+                </motion.div>
 
-            <div className="grid gap-4">
-              {products.map((product) => (
-                <Card key={product.id}>
-                  <CardContent className="p-6">
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-1">
-                        <h3 className="font-semibold">{product.name}</h3>
-                        <p className="text-sm text-muted-foreground">{product.description}</p>
-                        <div className="flex items-center gap-4 text-sm">
-                          <span className="font-medium">${product.price}</span>
-                          <span>Stock: {product.stock_quantity}</span>
-                          <Badge variant={product.stock_quantity > 0 ? "default" : "destructive"}>
-                            {product.stock_quantity > 0 ? "In Stock" : "Out of Stock"}
-                          </Badge>
-                          {product.categories && <Badge variant="outline">{product.categories.name}</Badge>}
+                <motion.div whileHover={{ scale: 1.02, y: -2 }}>
+                  <Card className="rounded-2xl border-0 shadow-lg bg-card/60 backdrop-blur-sm hover:shadow-xl transition-all duration-300">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+                      <CardTitle className="text-base font-medium text-muted-foreground">Low Stock Items</CardTitle>
+                      {/* Placeholder for TrendingUp icon */}
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-3xl font-bold text-foreground">
+                        {products.filter((p) => p.stock_quantity < 5).length}
+                      </div>
+                      <p className="text-base text-muted-foreground mt-1">Items with less than 5 in stock</p>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              </motion.div>
+
+              {/* CHANGE> Added back-in-stock insights section */}
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
+                <BackInStockInsights shopId={shop.id} />
+              </motion.div>
+
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+                <Card className="rounded-2xl border-0 shadow-lg bg-card/60 backdrop-blur-sm">
+                  <CardHeader>
+                    <CardTitle className="text-2xl font-bold text-foreground">Recent Products</CardTitle>
+                    <CardDescription className="text-base">Your latest inventory items</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {products.length === 0 ? (
+                      <div className="text-center py-12">
+                        <motion.div
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          transition={{ delay: 0.2, type: "spring" }}
+                          className="flex items-center justify-center w-20 h-20 rounded-2xl bg-muted/50 mx-auto mb-6"
+                        >
+                          {/* Placeholder for Package icon */}
+                        </motion.div>
+                        <h3 className="text-xl font-semibold text-foreground mb-2">No products yet</h3>
+                        <p className="text-base text-muted-foreground">Add your first product to get started</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {products.slice(0, 5).map((product, index) => (
+                          <motion.div
+                            key={product.id}
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: index * 0.1 }}
+                            whileHover={{ scale: 1.01 }}
+                            className="flex items-center justify-between p-6 border rounded-2xl bg-background/50 hover:bg-background/80 transition-all duration-200"
+                          >
+                            <div>
+                              <h4 className="text-lg font-semibold text-foreground">{product.name}</h4>
+                              <p className="text-base text-muted-foreground">
+                                ${product.price} • Stock: {product.stock_quantity}
+                              </p>
+                            </div>
+                            <Badge
+                              variant={product.is_available ? "default" : "secondary"}
+                              className="rounded-xl px-3 py-1 text-base"
+                            >
+                              {product.is_available ? "Available" : "Out of Stock"}
+                            </Badge>
+                          </motion.div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </motion.div>
+            </TabsContent>
+
+            <TabsContent value="inventory" className="space-y-8">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                className="flex justify-between items-center"
+              >
+                <div>
+                  <h2 className="text-3xl font-bold text-foreground">Inventory Management</h2>
+                  <p className="text-lg text-muted-foreground text-pretty">Manage your products and stock levels</p>
+                </div>
+                <div className="flex gap-3">
+                  {/* CHANGE> Added inventory templates button */}
+                  <InventoryTemplates
+                    categories={categories}
+                    onSelectTemplate={(template) => {
+                      setEditingProduct({
+                        id: "",
+                        name: template.name,
+                        description: template.description,
+                        price: template.price,
+                        stock_quantity: template.typical_stock,
+                        is_available: true,
+                        category_id:
+                          categories.find((c) => c.name === template.category)?.id || categories[0]?.id || "",
+                      } as Product)
+                      setShowProductForm(true)
+                    }}
+                  />
+                  <Dialog open={showProductForm} onOpenChange={setShowProductForm}>
+                    <DialogTrigger asChild>
+                      <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                        <Button
+                          onClick={() => setEditingProduct(null)}
+                          className="rounded-2xl px-6 py-3 text-base font-medium"
+                        >
+                          {/* Placeholder for Plus icon */}
+                          Add Product
+                        </Button>
+                      </motion.div>
+                    </DialogTrigger>
+                    <DialogContent className="rounded-2xl max-w-md">
+                      <DialogHeader>
+                        <DialogTitle className="text-2xl">
+                          {editingProduct ? "Edit Product" : "Add New Product"}
+                        </DialogTitle>
+                        <DialogDescription className="text-base">
+                          {editingProduct ? "Update product details" : "Add a new product to your inventory"}
+                        </DialogDescription>
+                      </DialogHeader>
+                      <form action={editingProduct ? handleUpdateProduct : handleCreateProduct} className="space-y-6">
+                        <div className="grid gap-3">
+                          <Label htmlFor="product-name" className="text-base font-medium">
+                            Product Name
+                          </Label>
+                          <Input
+                            id="product-name"
+                            name="name"
+                            defaultValue={editingProduct?.name}
+                            placeholder="Product name"
+                            required
+                            className="h-12 text-base rounded-2xl border-2 focus:border-primary/50 focus:ring-4 focus:ring-primary/10"
+                          />
+                        </div>
+                        <div className="grid gap-3">
+                          <Label htmlFor="product-description" className="text-base font-medium">
+                            Description
+                          </Label>
+                          <Textarea
+                            id="product-description"
+                            name="description"
+                            defaultValue={editingProduct?.description}
+                            placeholder="Product description"
+                            className="min-h-24 text-base rounded-2xl border-2 focus:border-primary/50 focus:ring-4 focus:ring-primary/10"
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="grid gap-3">
+                            <Label htmlFor="product-price" className="text-base font-medium">
+                              Price ($)
+                            </Label>
+                            <Input
+                              id="product-price"
+                              name="price"
+                              type="number"
+                              step="0.01"
+                              defaultValue={editingProduct?.price}
+                              placeholder="0.00"
+                              required
+                              className="h-12 text-base rounded-2xl border-2 focus:border-primary/50 focus:ring-4 focus:ring-primary/10"
+                            />
+                          </div>
+                          <div className="grid gap-3">
+                            <Label htmlFor="product-stock" className="text-base font-medium">
+                              Stock Quantity
+                            </Label>
+                            <Input
+                              id="product-stock"
+                              name="stock_quantity"
+                              type="number"
+                              defaultValue={editingProduct?.stock_quantity}
+                              placeholder="0"
+                              required
+                              className="h-12 text-base rounded-2xl border-2 focus:border-primary/50 focus:ring-4 focus:ring-primary/10"
+                            />
+                          </div>
+                        </div>
+                        <div className="grid gap-3">
+                          <Label htmlFor="product-category" className="text-base font-medium">
+                            Category
+                          </Label>
+                          <Select name="category_id" defaultValue={editingProduct?.category_id}>
+                            <SelectTrigger className="h-12 text-base rounded-2xl border-2">
+                              <SelectValue placeholder="Select a category" />
+                            </SelectTrigger>
+                            <SelectContent className="rounded-2xl">
+                              {categories.map((category) => (
+                                <SelectItem key={category.id} value={category.id} className="text-base">
+                                  {category.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                          <Button type="submit" className="w-full h-12 text-base font-medium rounded-2xl">
+                            {editingProduct ? "Update Product" : "Add Product"}
+                          </Button>
+                        </motion.div>
+                      </form>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="grid gap-6"
+              >
+                {/* CHANGE> Added batch inventory actions */}
+                <BatchInventoryActions products={products} onProductsUpdated={loadDashboardData} />
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="grid gap-6"
+              >
+                <AnimatePresence>
+                  {products.map((product, index) => (
+                    <motion.div
+                      key={product.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                      transition={{ delay: index * 0.05 }}
+                      whileHover={{ scale: 1.01 }}
+                    >
+                      <Card className="rounded-2xl border-0 shadow-lg bg-card/60 backdrop-blur-sm hover:shadow-xl transition-all duration-300">
+                        <CardContent className="p-8">
+                          <div className="flex items-center justify-between">
+                            <div className="space-y-3 flex-1">
+                              <h3 className="text-xl font-bold text-foreground">{product.name}</h3>
+                              <p className="text-base text-muted-foreground text-pretty">{product.description}</p>
+                              <div className="flex items-center gap-6 text-base flex-wrap">
+                                <span className="font-bold text-2xl text-primary">${product.price}</span>
+                                <span className="text-muted-foreground">Stock: {product.stock_quantity}</span>
+                                <Badge
+                                  variant={product.stock_quantity > 0 ? "default" : "destructive"}
+                                  className="rounded-xl px-3 py-1"
+                                >
+                                  {product.stock_quantity > 0 ? "In Stock" : "Out of Stock"}
+                                </Badge>
+                                {product.categories && (
+                                  <Badge variant="outline" className="rounded-xl px-3 py-1">
+                                    {product.categories.name}
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    setEditingProduct(product)
+                                    setShowProductForm(true)
+                                  }}
+                                  className="rounded-2xl border-2 px-4 py-2"
+                                >
+                                  {/* Placeholder for Edit icon */}
+                                </Button>
+                              </motion.div>
+                              <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleDeleteProduct(product.id)}
+                                  className="rounded-2xl border-2 px-4 py-2 text-red-600 border-red-200 hover:bg-red-50"
+                                >
+                                  {/* Placeholder for Trash2 icon */}
+                                </Button>
+                              </motion.div>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </motion.div>
+            </TabsContent>
+
+            <TabsContent value="chat" className="space-y-8">
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+                <Card className="rounded-2xl border-0 shadow-lg bg-card/60 backdrop-blur-sm mb-6">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-2xl">
+                      {/* Placeholder for MessageCircle icon */}
+                      Customer Support
+                    </CardTitle>
+                    <CardDescription className="text-base">
+                      Manage customer inquiries and provide support. Auto-responses handle common questions about hours,
+                      availability, and pricing.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid gap-4 md:grid-cols-3">
+                      <div className="flex items-center gap-3 p-4 bg-green-50 rounded-2xl border border-green-200">
+                        <div className="w-3 h-3 bg-green-500 rounded-full"></div>
+                        <div>
+                          <p className="font-medium text-green-900">Auto-responses active</p>
+                          <p className="text-sm text-green-700">Handling common questions</p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setEditingProduct(product)
-                            setShowProductForm(true)
-                          }}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button variant="outline" size="sm" onClick={() => handleDeleteProduct(product.id)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                      <div className="flex items-center gap-3 p-4 bg-blue-50 rounded-2xl border border-blue-200">
+                        {/* Placeholder for Users icon */}
+                        <div>
+                          <p className="font-medium text-blue-900">Quick replies ready</p>
+                          <p className="text-sm text-blue-700">One-tap responses available</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 p-4 bg-orange-50 rounded-2xl border border-orange-200">
+                        {/* Placeholder for MessageCircle icon */}
+                        <div>
+                          <p className="font-medium text-orange-900">{unreadMessages} unread</p>
+                          <p className="text-sm text-orange-700">Messages waiting for response</p>
+                        </div>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
-              ))}
-            </div>
-          </TabsContent>
 
-          <TabsContent value="settings" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Shop Settings</CardTitle>
-                <CardDescription>Manage your shop information</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-2">
-                  <Label>Shop Name</Label>
-                  <Input value={shop.name} readOnly />
+                <ChatList isCustomer={false} currentUserId={user.id} />
+              </motion.div>
+            </TabsContent>
+
+            <TabsContent value="settings" className="space-y-8">
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+                <div className="grid gap-8 lg:grid-cols-2">
+                  <Card className="rounded-2xl border-0 shadow-lg bg-card/60 backdrop-blur-sm">
+                    <CardHeader>
+                      <CardTitle className="text-2xl font-bold text-foreground">{t("shopSettings")}</CardTitle>
+                      <CardDescription className="text-base">Manage your shop information</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      <div className="grid gap-3">
+                        <Label className="text-base font-medium">{t("shopName")}</Label>
+                        <Input value={shop.name} readOnly className="h-12 text-base rounded-2xl border-2 bg-muted/30" />
+                      </div>
+                      <div className="grid gap-3">
+                        <Label className="text-base font-medium">{t("description")}</Label>
+                        <Textarea
+                          value={shop.description || ""}
+                          readOnly
+                          className="min-h-24 text-base rounded-2xl border-2 bg-muted/30"
+                        />
+                      </div>
+                      <div className="grid gap-3">
+                        <Label className="text-base font-medium">{t("address")}</Label>
+                        <Input
+                          value={shop.address}
+                          readOnly
+                          className="h-12 text-base rounded-2xl border-2 bg-muted/30"
+                        />
+                      </div>
+                      <div className="grid gap-3">
+                        <Label className="text-base font-medium">{t("phone")}</Label>
+                        <Input
+                          value={shop.phone || ""}
+                          readOnly
+                          className="h-12 text-base rounded-2xl border-2 bg-muted/30"
+                        />
+                      </div>
+                      <div className="grid gap-3">
+                        <Label className="text-base font-medium">Shop ID</Label>
+                        <Input
+                          value={shop.id}
+                          readOnly
+                          className="h-12 text-base rounded-2xl border-2 bg-muted/30 font-mono"
+                        />
+                        <p className="text-base text-muted-foreground text-pretty">
+                          Share this ID with customers for manual purchase tracking
+                        </p>
+                      </div>
+                      <div className="p-6 bg-muted/20 rounded-2xl border-2 border-dashed">
+                        <p className="text-base text-muted-foreground text-pretty">
+                          Shop settings editing will be available in a future update.
+                        </p>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* CHANGE> Added language selector */}
+                  <Card className="rounded-2xl border-0 shadow-lg bg-card/60 backdrop-blur-sm">
+                    <CardHeader>
+                      <CardTitle className="text-2xl font-bold text-foreground">Language Settings</CardTitle>
+                      <CardDescription className="text-base">Choose your preferred language</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <LanguageSelector currentLanguage={language} onLanguageChange={changeLanguage} />
+                    </CardContent>
+                  </Card>
                 </div>
-                <div className="grid gap-2">
-                  <Label>Description</Label>
-                  <Textarea value={shop.description || ""} readOnly />
-                </div>
-                <div className="grid gap-2">
-                  <Label>Address</Label>
-                  <Input value={shop.address} readOnly />
-                </div>
-                <div className="grid gap-2">
-                  <Label>Phone</Label>
-                  <Input value={shop.phone || ""} readOnly />
-                </div>
-                <div className="grid gap-2">
-                  <Label>Shop ID</Label>
-                  <Input value={shop.id} readOnly />
-                  <p className="text-xs text-muted-foreground">
-                    Share this ID with customers for manual purchase tracking
-                  </p>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Shop settings editing will be available in a future update.
-                </p>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+
+                {/* CHANGE> Added CSV export section */}
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
+                  <CSVExport
+                    products={products}
+                    backInStockRequests={loadBackInStockRequests()} // Use the imported function
+                    shopName={shop.name}
+                  />
+                </motion.div>
+              </motion.div>
+            </TabsContent>
+          </Tabs>
+        </motion.div>
       </div>
+      {shop && <FloatingShopToggle shop={shop} onToggle={handleShopToggle} />}
     </div>
   )
 }

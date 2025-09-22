@@ -4,10 +4,11 @@ import { useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { useToast } from "@/hooks/use-toast"
-import { ArrowLeft, Bell, BellOff, Package, Store, Plus, Check, Trash2 } from "lucide-react"
+import { ArrowLeft, BellOff, Check } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { motion, AnimatePresence } from "framer-motion"
+import { EnhancedNotificationCard } from "./enhanced-notification-card"
 
 interface Notification {
   id: string
@@ -17,12 +18,17 @@ interface Notification {
   is_read: boolean
   created_at: string
   shops?: {
+    id: string
     name: string
     address: string
+    phone?: string
+    is_open: boolean
   }
   products?: {
+    id: string
     name: string
     price: number
+    stock_quantity: number
   }
 }
 
@@ -36,51 +42,12 @@ export function NotificationsList({
   const router = useRouter()
   const supabase = createClient()
 
-  const getNotificationIcon = (type: string) => {
-    switch (type) {
-      case "back_in_stock":
-        return <Package className="h-5 w-5 text-primary" />
-      case "shop_opened":
-        return <Store className="h-5 w-5 text-accent" />
-      case "new_product":
-        return <Plus className="h-5 w-5 text-chart-1" />
-      default:
-        return <Bell className="h-5 w-5 text-muted-foreground" />
-    }
+  const handleNotificationUpdate = (id: string, updates: Partial<Notification>) => {
+    setNotifications(notifications.map((n) => (n.id === id ? { ...n, ...updates } : n)))
   }
 
-  const getNotificationColor = (type: string) => {
-    switch (type) {
-      case "back_in_stock":
-        return "default"
-      case "shop_opened":
-        return "secondary"
-      case "new_product":
-        return "outline"
-      default:
-        return "outline"
-    }
-  }
-
-  const markAsRead = async (notificationId: string) => {
-    try {
-      const { error } = await supabase
-        .from("notifications")
-        .update({ is_read: true })
-        .eq("id", notificationId)
-        .eq("user_id", userId)
-
-      if (error) throw error
-
-      setNotifications(notifications.map((n) => (n.id === notificationId ? { ...n, is_read: true } : n)))
-    } catch (error) {
-      console.error("Error marking notification as read:", error)
-      toast({
-        title: "Error",
-        description: "Failed to mark notification as read",
-        variant: "destructive",
-      })
-    }
+  const handleNotificationDelete = (id: string) => {
+    setNotifications(notifications.filter((n) => n.id !== id))
   }
 
   const markAllAsRead = async () => {
@@ -121,149 +88,107 @@ export function NotificationsList({
     }
   }
 
-  const deleteNotification = async (notificationId: string) => {
-    try {
-      const { error } = await supabase.from("notifications").delete().eq("id", notificationId).eq("user_id", userId)
-
-      if (error) throw error
-
-      setNotifications(notifications.filter((n) => n.id !== notificationId))
-      toast({
-        title: "Notification Deleted",
-        description: "Notification has been removed",
-      })
-    } catch (error) {
-      console.error("Error deleting notification:", error)
-      toast({
-        title: "Error",
-        description: "Failed to delete notification",
-        variant: "destructive",
-      })
-    }
-  }
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString)
-    const now = new Date()
-    const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60))
-
-    if (diffInHours < 1) {
-      return "Just now"
-    } else if (diffInHours < 24) {
-      return `${diffInHours}h ago`
-    } else if (diffInHours < 48) {
-      return "Yesterday"
-    } else {
-      return date.toLocaleDateString("en-US", {
-        month: "short",
-        day: "numeric",
-        year: date.getFullYear() !== now.getFullYear() ? "numeric" : undefined,
-      })
-    }
-  }
-
   const unreadCount = notifications.filter((n) => !n.is_read).length
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="border-b bg-card">
-        <div className="flex h-16 items-center px-6">
-          <Button variant="ghost" size="sm" onClick={() => router.back()}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
-          </Button>
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/10">
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="border-b bg-card/80 backdrop-blur-xl shadow-sm"
+      >
+        <div className="flex h-20 items-center px-6 max-w-7xl mx-auto">
+          <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <Button variant="ghost" size="sm" onClick={() => router.back()} className="rounded-2xl">
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Back
+            </Button>
+          </motion.div>
           <div className="ml-4">
-            <h1 className="font-semibold">Notifications</h1>
-            <p className="text-sm text-muted-foreground">
+            <h1 className="text-xl font-bold text-foreground">Notifications</h1>
+            <p className="text-base text-muted-foreground">
               {unreadCount > 0 ? `${unreadCount} unread` : "All caught up"}
             </p>
           </div>
           <div className="ml-auto">
             {unreadCount > 0 && (
-              <Button variant="outline" size="sm" onClick={markAllAsRead} disabled={isLoading}>
-                <Check className="h-4 w-4 mr-2" />
-                Mark All Read
-              </Button>
+              <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={markAllAsRead}
+                  disabled={isLoading}
+                  className="rounded-2xl border-2 bg-transparent"
+                >
+                  <Check className="h-4 w-4 mr-2" />
+                  Mark All Read
+                </Button>
+              </motion.div>
             )}
           </div>
         </div>
-      </div>
+      </motion.div>
 
-      <div className="p-6">
-        {notifications.length === 0 ? (
-          <Card>
-            <CardContent className="text-center py-12">
-              <BellOff className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No Notifications</h3>
-              <p className="text-muted-foreground mb-4">
-                You'll receive notifications when shops open, items come back in stock, or new products are added.
-              </p>
-              <Button variant="outline" onClick={() => router.push("/dashboard")}>
-                Browse Shops
-              </Button>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-4">
-            {notifications.map((notification) => (
-              <Card
-                key={notification.id}
-                className={`transition-all ${!notification.is_read ? "border-primary/50 bg-primary/5" : "hover:shadow-md"}`}
-              >
-                <CardContent className="p-6">
-                  <div className="flex items-start gap-4">
-                    <div className="flex-shrink-0 mt-1">{getNotificationIcon(notification.type)}</div>
-                    <div className="flex-1 space-y-2">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <h3 className="font-semibold text-lg">{notification.title}</h3>
-                          {!notification.is_read && (
-                            <Badge variant="default" className="mt-1 text-xs">
-                              New
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm text-muted-foreground">{formatDate(notification.created_at)}</span>
-                          <Button variant="ghost" size="sm" onClick={() => deleteNotification(notification.id)}>
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                      <p className="text-muted-foreground">{notification.message}</p>
-
-                      {notification.shops && (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Store className="h-4 w-4" />
-                          <span>{notification.shops.name}</span>
-                        </div>
-                      )}
-
-                      {notification.products && (
-                        <div className="flex items-center gap-2 text-sm">
-                          <Package className="h-4 w-4 text-muted-foreground" />
-                          <span className="text-muted-foreground">{notification.products.name}</span>
-                          <Badge variant={getNotificationColor(notification.type)}>
-                            ${notification.products.price}
-                          </Badge>
-                        </div>
-                      )}
-
-                      {!notification.is_read && (
-                        <div className="pt-2">
-                          <Button variant="outline" size="sm" onClick={() => markAsRead(notification.id)}>
-                            <Check className="h-4 w-4 mr-2" />
-                            Mark as Read
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+      <div className="p-6 max-w-4xl mx-auto">
+        <AnimatePresence mode="wait">
+          {notifications.length === 0 ? (
+            <motion.div
+              key="no-notifications"
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+            >
+              <Card className="rounded-2xl border-0 shadow-lg bg-card/60 backdrop-blur-sm">
+                <CardContent className="text-center py-16">
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    transition={{ delay: 0.2, type: "spring" }}
+                    className="flex items-center justify-center w-20 h-20 rounded-2xl bg-muted/50 mx-auto mb-6"
+                  >
+                    <BellOff className="h-10 w-10 text-muted-foreground" />
+                  </motion.div>
+                  <h3 className="text-2xl font-bold text-foreground mb-3">No Notifications</h3>
+                  <p className="text-base text-muted-foreground mb-6 text-pretty max-w-md mx-auto">
+                    You'll receive notifications when shops open, items come back in stock, or new products are added.
+                  </p>
+                  <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                    <Button
+                      variant="outline"
+                      onClick={() => router.push("/dashboard")}
+                      className="rounded-2xl border-2 px-6 py-3 text-base"
+                    >
+                      Browse Shops
+                    </Button>
+                  </motion.div>
                 </CardContent>
               </Card>
-            ))}
-          </div>
-        )}
+            </motion.div>
+          ) : (
+            <motion.div
+              key="notifications-list"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="space-y-6"
+            >
+              {notifications.map((notification, index) => (
+                <motion.div
+                  key={notification.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                >
+                  <EnhancedNotificationCard
+                    notification={notification}
+                    userId={userId}
+                    onUpdate={handleNotificationUpdate}
+                    onDelete={handleNotificationDelete}
+                  />
+                </motion.div>
+              ))}
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     </div>
   )
