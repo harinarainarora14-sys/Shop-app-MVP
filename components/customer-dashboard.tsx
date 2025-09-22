@@ -12,8 +12,6 @@ import { Store, Package, Search, Bell, LogOut, MapPin, Phone, QrCode, Receipt, C
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { motion, AnimatePresence } from "framer-motion"
-import { LanguageSelector } from "./language-selector"
-import { useTranslation } from "@/hooks/use-translation"
 
 interface Profile {
   id: string
@@ -58,7 +56,6 @@ export function CustomerDashboard({ user, profile }: { user: User; profile: Prof
   const { toast } = useToast()
   const router = useRouter()
   const supabase = createClient()
-  const { t, language, changeLanguage, formatCurrency, getTimeAgo } = useTranslation()
 
   useEffect(() => {
     loadDashboardData()
@@ -216,9 +213,6 @@ export function CustomerDashboard({ user, profile }: { user: User; profile: Prof
             </div>
           </div>
           <div className="ml-auto flex items-center gap-3">
-            {/* CHANGE> Added compact language selector */}
-            <LanguageSelector currentLanguage={language} onLanguageChange={changeLanguage} compact={true} />
-
             <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
               <Button
                 variant="outline"
@@ -228,7 +222,7 @@ export function CustomerDashboard({ user, profile }: { user: User; profile: Prof
               >
                 <Link href="/notifications">
                   <Bell className="h-4 w-4 mr-2" />
-                  <span className="hidden sm:inline text-base">{t("notifications")}</span>
+                  <span className="hidden sm:inline text-base">Notifications</span>
                   <AnimatePresence>
                     {unreadNotifications > 0 && (
                       <motion.div
@@ -258,7 +252,7 @@ export function CustomerDashboard({ user, profile }: { user: User; profile: Prof
               >
                 <Link href="/scanner">
                   <QrCode className="h-4 w-4 mr-2" />
-                  <span className="hidden sm:inline text-base">{t("scanner")}</span>
+                  <span className="hidden sm:inline text-base">Scanner</span>
                 </Link>
               </Button>
             </motion.div>
@@ -271,7 +265,7 @@ export function CustomerDashboard({ user, profile }: { user: User; profile: Prof
               >
                 <Link href="/purchases">
                   <Receipt className="h-4 w-4 mr-2" />
-                  <span className="hidden sm:inline text-base">{t("purchases")}</span>
+                  <span className="hidden sm:inline text-base">Purchases</span>
                 </Link>
               </Button>
             </motion.div>
@@ -282,7 +276,7 @@ export function CustomerDashboard({ user, profile }: { user: User; profile: Prof
                 className="text-muted-foreground hover:text-foreground rounded-2xl"
               >
                 <LogOut className="h-4 w-4 mr-2" />
-                <span className="hidden sm:inline text-base">{t("signOut")}</span>
+                <span className="hidden sm:inline text-base">Sign Out</span>
               </Button>
             </motion.div>
           </div>
@@ -298,7 +292,7 @@ export function CustomerDashboard({ user, profile }: { user: User; profile: Prof
         >
           <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-muted-foreground h-5 w-5" />
           <Input
-            placeholder={`${t("search")} shops, products, or locations...`}
+            placeholder="Search shops, products, or locations..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-12 h-14 text-base bg-card/50 backdrop-blur-sm border-2 focus:border-primary/50 focus:ring-4 focus:ring-primary/10 transition-all duration-300 rounded-2xl shadow-sm"
@@ -313,14 +307,14 @@ export function CustomerDashboard({ user, profile }: { user: User; profile: Prof
                 className="text-base font-medium data-[state=active]:bg-card data-[state=active]:shadow-lg data-[state=active]:border rounded-xl transition-all duration-200"
               >
                 <Store className="h-4 w-4 mr-2" />
-                {t("localShops")}
+                Local Shops
               </TabsTrigger>
               <TabsTrigger
                 value="products"
                 className="text-base font-medium data-[state=active]:bg-card data-[state=active]:shadow-lg data-[state=active]:border rounded-xl transition-all duration-200"
               >
                 <Package className="h-4 w-4 mr-2" />
-                {t("products")}
+                Products
               </TabsTrigger>
             </TabsList>
 
@@ -401,7 +395,7 @@ export function CustomerDashboard({ user, profile }: { user: User; profile: Prof
                                   <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: 0.2 }}>
                                     <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 transition-colors rounded-xl px-3 py-1">
                                       <Clock className="h-3 w-3 mr-1" />
-                                      {t("openNow")}
+                                      Open Now
                                     </Badge>
                                   </motion.div>
                                 </div>
@@ -435,7 +429,7 @@ export function CustomerDashboard({ user, profile }: { user: User; profile: Prof
                               >
                                 <Link href={`/shop/${shop.id}`}>
                                   <Package className="h-4 w-4 mr-2" />
-                                  {t("viewProducts")}
+                                  View Products
                                 </Link>
                               </Button>
                             </motion.div>
@@ -534,11 +528,9 @@ export function CustomerDashboard({ user, profile }: { user: User; profile: Prof
                                 )}
 
                                 <div className="flex items-center gap-8 flex-wrap">
-                                  <span className="text-3xl font-bold text-primary">
-                                    {formatCurrency(product.price)}
-                                  </span>
+                                  <span className="text-3xl font-bold text-primary">${product.price}</span>
                                   <div className="flex items-center gap-3">
-                                    <span className="text-base text-muted-foreground">{t("stock")}:</span>
+                                    <span className="text-base text-muted-foreground">Stock:</span>
                                     <Badge
                                       variant={
                                         product.stock_quantity > 10
@@ -549,7 +541,7 @@ export function CustomerDashboard({ user, profile }: { user: User; profile: Prof
                                       }
                                       className="rounded-xl px-3 py-1 text-base"
                                     >
-                                      {product.stock_quantity} {t("available")}
+                                      {product.stock_quantity} available
                                     </Badge>
                                   </div>
                                 </div>
@@ -576,7 +568,7 @@ export function CustomerDashboard({ user, profile }: { user: User; profile: Prof
                                     className="bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800 transition-all duration-200 rounded-2xl px-6 py-3 text-base font-medium w-full lg:w-auto"
                                   >
                                     <Bell className="h-4 w-4 mr-2" />
-                                    {t("notifyMe")}
+                                    Notify Me
                                   </Button>
                                 </motion.div>
                               </div>

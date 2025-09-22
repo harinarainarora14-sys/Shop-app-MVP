@@ -19,19 +19,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { useToast } from "@/hooks/use-toast"
+import { Store, Package, Plus, Edit, Trash2, TrendingUp, LogOut, Bell } from "lucide-react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { motion, AnimatePresence } from "framer-motion"
-import { ChatList } from "@/components/chat/chat-list"
-import { FloatingShopToggle } from "./floating-shop-toggle"
-import { InventoryTemplates } from "./inventory-templates"
-import { BatchInventoryActions } from "./batch-inventory-actions"
-import { BackInStockInsights } from "./back-in-stock-insights"
-import { CSVExport } from "./csv-export"
-import { LanguageSelector } from "./language-selector"
-import { useTranslation } from "@/hooks/use-translation"
-import { loadBackInStockRequests } from "@/lib/supabase/back-in-stock-requests" // Import the missing function
-import { useToast } from "@/hooks/use-toast" // Import the missing hook
 
 interface Profile {
   id: string
@@ -53,7 +45,6 @@ interface Shop {
   phone: string
   is_open: boolean
   image_url: string
-  updated_at: string
 }
 
 interface Product {
@@ -81,16 +72,13 @@ export function ShopkeeperDashboard({ user, profile }: { user: User; profile: Pr
   const [showProductForm, setShowProductForm] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [unreadNotifications, setUnreadNotifications] = useState(0)
-  const [unreadMessages, setUnreadMessages] = useState(0)
   const { toast } = useToast()
   const router = useRouter()
   const supabase = createClient()
-  const { t, language, changeLanguage } = useTranslation()
 
   useEffect(() => {
     loadDashboardData()
     loadNotificationCount()
-    loadUnreadMessagesCount()
   }, [])
 
   const loadDashboardData = async () => {
@@ -144,36 +132,15 @@ export function ShopkeeperDashboard({ user, profile }: { user: User; profile: Pr
     }
   }
 
-  const loadUnreadMessagesCount = async () => {
-    if (!shop) return
-
-    try {
-      const { count } = await supabase
-        .from("messages")
-        .select("*", { count: "exact", head: true })
-        .eq("is_read", false)
-        .neq("sender_id", user.id) // Don't count own messages
-        .in("conversation_id", supabase.from("conversations").select("id").eq("shop_id", shop.id))
-
-      setUnreadMessages(count || 0)
-    } catch (error) {
-      console.error("Error loading unread messages count:", error)
-    }
-  }
-
   const handleShopToggle = async (isOpen: boolean) => {
     if (!shop) return
 
-    setShop({ ...shop, is_open: isOpen, updated_at: new Date().toISOString() })
-
     try {
-      const { error } = await supabase
-        .from("shops")
-        .update({ is_open: isOpen, updated_at: new Date().toISOString() })
-        .eq("id", shop.id)
+      const { error } = await supabase.from("shops").update({ is_open: isOpen }).eq("id", shop.id)
 
       if (error) throw error
 
+      setShop({ ...shop, is_open: isOpen })
       toast({
         title: "Shop Status Updated",
         description: `Your shop is now ${isOpen ? "open" : "closed"}`,
@@ -197,7 +164,6 @@ export function ShopkeeperDashboard({ user, profile }: { user: User; profile: Pr
         address: formData.get("address") as string,
         phone: formData.get("phone") as string,
         is_open: false,
-        updated_at: new Date().toISOString(),
       }
 
       const { data, error } = await supabase.from("shops").insert(shopData).select().single()
@@ -365,6 +331,7 @@ export function ShopkeeperDashboard({ user, profile }: { user: User; profile: Pr
             </div>
             <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
               <Button variant="outline" onClick={handleSignOut} className="rounded-2xl border-2 bg-transparent">
+                <LogOut className="h-4 w-4 mr-2" />
                 Sign Out
               </Button>
             </motion.div>
@@ -373,7 +340,15 @@ export function ShopkeeperDashboard({ user, profile }: { user: User; profile: Pr
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
             <Card className="rounded-2xl border-0 shadow-xl bg-card/60 backdrop-blur-sm">
               <CardHeader className="pb-6">
-                <CardTitle className="flex items-center gap-3 text-2xl">Create Your Shop</CardTitle>
+                <CardTitle className="flex items-center gap-3 text-2xl">
+                  <motion.div
+                    whileHover={{ scale: 1.1, rotate: 5 }}
+                    className="flex items-center justify-center w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20"
+                  >
+                    <Store className="h-6 w-6 text-primary" />
+                  </motion.div>
+                  Create Your Shop
+                </CardTitle>
                 <CardDescription className="text-base text-pretty">
                   Set up your shop profile to start connecting with customers
                 </CardDescription>
@@ -453,7 +428,7 @@ export function ShopkeeperDashboard({ user, profile }: { user: User; profile: Pr
               whileHover={{ scale: 1.05 }}
               className="flex items-center justify-center w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20"
             >
-              {/* Placeholder for Store icon */}
+              <Store className="h-6 w-6 text-primary" />
             </motion.div>
             <div>
               <h1 className="text-xl font-bold text-foreground">{shop.name}</h1>
@@ -463,33 +438,8 @@ export function ShopkeeperDashboard({ user, profile }: { user: User; profile: Pr
           <div className="ml-auto flex items-center gap-4">
             <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
               <Button variant="outline" size="sm" asChild className="rounded-2xl border-2 bg-transparent">
-                <Link href="/chat" className="relative">
-                  {/* Placeholder for MessageCircle icon */}
-                  <span className="text-base">Messages</span>
-                  <AnimatePresence>
-                    {unreadMessages > 0 && (
-                      <motion.div
-                        initial={{ scale: 0 }}
-                        animate={{ scale: 1 }}
-                        exit={{ scale: 0 }}
-                        className="absolute -top-2 -right-2"
-                      >
-                        <Badge
-                          variant="destructive"
-                          className="h-6 w-6 p-0 text-xs flex items-center justify-center rounded-full"
-                        >
-                          {unreadMessages > 9 ? "9+" : unreadMessages}
-                        </Badge>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </Link>
-              </Button>
-            </motion.div>
-            <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-              <Button variant="outline" size="sm" asChild className="rounded-2xl border-2 bg-transparent">
                 <Link href="/notifications" className="relative">
-                  {/* Placeholder for Bell icon */}
+                  <Bell className="h-4 w-4 mr-2" />
                   <span className="text-base">Notifications</span>
                   <AnimatePresence>
                     {unreadNotifications > 0 && (
@@ -524,7 +474,7 @@ export function ShopkeeperDashboard({ user, profile }: { user: User; profile: Pr
             </div>
             <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
               <Button variant="outline" onClick={handleSignOut} className="rounded-2xl border-2 bg-transparent">
-                {/* Placeholder for LogOut icon */}
+                <LogOut className="h-4 w-4 mr-2" />
                 <span className="text-base">Sign Out</span>
               </Button>
             </motion.div>
@@ -535,7 +485,7 @@ export function ShopkeeperDashboard({ user, profile }: { user: User; profile: Pr
       <div className="p-6 max-w-7xl mx-auto">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
           <Tabs defaultValue="overview" className="space-y-8">
-            <TabsList className="grid w-full max-w-lg grid-cols-4 h-14 p-1 bg-muted/30 backdrop-blur-sm rounded-2xl border">
+            <TabsList className="grid w-full max-w-md grid-cols-3 h-14 p-1 bg-muted/30 backdrop-blur-sm rounded-2xl border">
               <TabsTrigger
                 value="overview"
                 className="text-base font-medium data-[state=active]:bg-card data-[state=active]:shadow-lg data-[state=active]:border rounded-xl transition-all duration-200"
@@ -547,20 +497,6 @@ export function ShopkeeperDashboard({ user, profile }: { user: User; profile: Pr
                 className="text-base font-medium data-[state=active]:bg-card data-[state=active]:shadow-lg data-[state=active]:border rounded-xl transition-all duration-200"
               >
                 Inventory
-              </TabsTrigger>
-              <TabsTrigger
-                value="chat"
-                className="text-base font-medium data-[state=active]:bg-card data-[state=active]:shadow-lg data-[state=active]:border rounded-xl transition-all duration-200 relative"
-              >
-                Chat
-                {unreadMessages > 0 && (
-                  <Badge
-                    variant="destructive"
-                    className="absolute -top-1 -right-1 h-5 w-5 p-0 text-xs flex items-center justify-center rounded-full"
-                  >
-                    {unreadMessages > 9 ? "9+" : unreadMessages}
-                  </Badge>
-                )}
               </TabsTrigger>
               <TabsTrigger
                 value="settings"
@@ -575,13 +511,18 @@ export function ShopkeeperDashboard({ user, profile }: { user: User; profile: Pr
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
-                className="grid gap-6 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-4"
+                className="grid gap-6 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3"
               >
                 <motion.div whileHover={{ scale: 1.02, y: -2 }}>
                   <Card className="rounded-2xl border-0 shadow-lg bg-card/60 backdrop-blur-sm hover:shadow-xl transition-all duration-300">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
                       <CardTitle className="text-base font-medium text-muted-foreground">Total Products</CardTitle>
-                      {/* Placeholder for Package icon */}
+                      <motion.div
+                        whileHover={{ rotate: 5 }}
+                        className="flex items-center justify-center w-10 h-10 rounded-xl bg-primary/10"
+                      >
+                        <Package className="h-5 w-5 text-primary" />
+                      </motion.div>
                     </CardHeader>
                     <CardContent>
                       <div className="text-3xl font-bold text-foreground">{products.length}</div>
@@ -596,7 +537,12 @@ export function ShopkeeperDashboard({ user, profile }: { user: User; profile: Pr
                   <Card className="rounded-2xl border-0 shadow-lg bg-card/60 backdrop-blur-sm hover:shadow-xl transition-all duration-300">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
                       <CardTitle className="text-base font-medium text-muted-foreground">Shop Status</CardTitle>
-                      {/* Placeholder for Store icon */}
+                      <motion.div
+                        whileHover={{ rotate: 5 }}
+                        className="flex items-center justify-center w-10 h-10 rounded-xl bg-primary/10"
+                      >
+                        <Store className="h-5 w-5 text-primary" />
+                      </motion.div>
                     </CardHeader>
                     <CardContent>
                       <div className="text-3xl font-bold mb-2">
@@ -615,21 +561,13 @@ export function ShopkeeperDashboard({ user, profile }: { user: User; profile: Pr
                 <motion.div whileHover={{ scale: 1.02, y: -2 }}>
                   <Card className="rounded-2xl border-0 shadow-lg bg-card/60 backdrop-blur-sm hover:shadow-xl transition-all duration-300">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-                      <CardTitle className="text-base font-medium text-muted-foreground">Customer Messages</CardTitle>
-                      {/* Placeholder for MessageCircle icon */}
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-3xl font-bold text-foreground">{unreadMessages}</div>
-                      <p className="text-base text-muted-foreground mt-1">Unread messages</p>
-                    </CardContent>
-                  </Card>
-                </motion.div>
-
-                <motion.div whileHover={{ scale: 1.02, y: -2 }}>
-                  <Card className="rounded-2xl border-0 shadow-lg bg-card/60 backdrop-blur-sm hover:shadow-xl transition-all duration-300">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
                       <CardTitle className="text-base font-medium text-muted-foreground">Low Stock Items</CardTitle>
-                      {/* Placeholder for TrendingUp icon */}
+                      <motion.div
+                        whileHover={{ rotate: 5 }}
+                        className="flex items-center justify-center w-10 h-10 rounded-xl bg-orange-100"
+                      >
+                        <TrendingUp className="h-5 w-5 text-orange-600" />
+                      </motion.div>
                     </CardHeader>
                     <CardContent>
                       <div className="text-3xl font-bold text-foreground">
@@ -639,11 +577,6 @@ export function ShopkeeperDashboard({ user, profile }: { user: User; profile: Pr
                     </CardContent>
                   </Card>
                 </motion.div>
-              </motion.div>
-
-              {/* CHANGE> Added back-in-stock insights section */}
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
-                <BackInStockInsights shopId={shop.id} />
               </motion.div>
 
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
@@ -661,7 +594,7 @@ export function ShopkeeperDashboard({ user, profile }: { user: User; profile: Pr
                           transition={{ delay: 0.2, type: "spring" }}
                           className="flex items-center justify-center w-20 h-20 rounded-2xl bg-muted/50 mx-auto mb-6"
                         >
-                          {/* Placeholder for Package icon */}
+                          <Package className="h-10 w-10 text-muted-foreground" />
                         </motion.div>
                         <h3 className="text-xl font-semibold text-foreground mb-2">No products yet</h3>
                         <p className="text-base text-muted-foreground">Add your first product to get started</p>
@@ -709,138 +642,109 @@ export function ShopkeeperDashboard({ user, profile }: { user: User; profile: Pr
                   <h2 className="text-3xl font-bold text-foreground">Inventory Management</h2>
                   <p className="text-lg text-muted-foreground text-pretty">Manage your products and stock levels</p>
                 </div>
-                <div className="flex gap-3">
-                  {/* CHANGE> Added inventory templates button */}
-                  <InventoryTemplates
-                    categories={categories}
-                    onSelectTemplate={(template) => {
-                      setEditingProduct({
-                        id: "",
-                        name: template.name,
-                        description: template.description,
-                        price: template.price,
-                        stock_quantity: template.typical_stock,
-                        is_available: true,
-                        category_id:
-                          categories.find((c) => c.name === template.category)?.id || categories[0]?.id || "",
-                      } as Product)
-                      setShowProductForm(true)
-                    }}
-                  />
-                  <Dialog open={showProductForm} onOpenChange={setShowProductForm}>
-                    <DialogTrigger asChild>
-                      <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-                        <Button
-                          onClick={() => setEditingProduct(null)}
-                          className="rounded-2xl px-6 py-3 text-base font-medium"
-                        >
-                          {/* Placeholder for Plus icon */}
-                          Add Product
-                        </Button>
-                      </motion.div>
-                    </DialogTrigger>
-                    <DialogContent className="rounded-2xl max-w-md">
-                      <DialogHeader>
-                        <DialogTitle className="text-2xl">
-                          {editingProduct ? "Edit Product" : "Add New Product"}
-                        </DialogTitle>
-                        <DialogDescription className="text-base">
-                          {editingProduct ? "Update product details" : "Add a new product to your inventory"}
-                        </DialogDescription>
-                      </DialogHeader>
-                      <form action={editingProduct ? handleUpdateProduct : handleCreateProduct} className="space-y-6">
+                <Dialog open={showProductForm} onOpenChange={setShowProductForm}>
+                  <DialogTrigger asChild>
+                    <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                      <Button
+                        onClick={() => setEditingProduct(null)}
+                        className="rounded-2xl px-6 py-3 text-base font-medium"
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Product
+                      </Button>
+                    </motion.div>
+                  </DialogTrigger>
+                  <DialogContent className="rounded-2xl max-w-md">
+                    <DialogHeader>
+                      <DialogTitle className="text-2xl">
+                        {editingProduct ? "Edit Product" : "Add New Product"}
+                      </DialogTitle>
+                      <DialogDescription className="text-base">
+                        {editingProduct ? "Update product details" : "Add a new product to your inventory"}
+                      </DialogDescription>
+                    </DialogHeader>
+                    <form action={editingProduct ? handleUpdateProduct : handleCreateProduct} className="space-y-6">
+                      <div className="grid gap-3">
+                        <Label htmlFor="product-name" className="text-base font-medium">
+                          Product Name
+                        </Label>
+                        <Input
+                          id="product-name"
+                          name="name"
+                          defaultValue={editingProduct?.name}
+                          placeholder="Product name"
+                          required
+                          className="h-12 text-base rounded-2xl border-2 focus:border-primary/50 focus:ring-4 focus:ring-primary/10"
+                        />
+                      </div>
+                      <div className="grid gap-3">
+                        <Label htmlFor="product-description" className="text-base font-medium">
+                          Description
+                        </Label>
+                        <Textarea
+                          id="product-description"
+                          name="description"
+                          defaultValue={editingProduct?.description}
+                          placeholder="Product description"
+                          className="min-h-24 text-base rounded-2xl border-2 focus:border-primary/50 focus:ring-4 focus:ring-primary/10"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
                         <div className="grid gap-3">
-                          <Label htmlFor="product-name" className="text-base font-medium">
-                            Product Name
+                          <Label htmlFor="product-price" className="text-base font-medium">
+                            Price ($)
                           </Label>
                           <Input
-                            id="product-name"
-                            name="name"
-                            defaultValue={editingProduct?.name}
-                            placeholder="Product name"
+                            id="product-price"
+                            name="price"
+                            type="number"
+                            step="0.01"
+                            defaultValue={editingProduct?.price}
+                            placeholder="0.00"
                             required
                             className="h-12 text-base rounded-2xl border-2 focus:border-primary/50 focus:ring-4 focus:ring-primary/10"
                           />
                         </div>
                         <div className="grid gap-3">
-                          <Label htmlFor="product-description" className="text-base font-medium">
-                            Description
+                          <Label htmlFor="product-stock" className="text-base font-medium">
+                            Stock Quantity
                           </Label>
-                          <Textarea
-                            id="product-description"
-                            name="description"
-                            defaultValue={editingProduct?.description}
-                            placeholder="Product description"
-                            className="min-h-24 text-base rounded-2xl border-2 focus:border-primary/50 focus:ring-4 focus:ring-primary/10"
+                          <Input
+                            id="product-stock"
+                            name="stock_quantity"
+                            type="number"
+                            defaultValue={editingProduct?.stock_quantity}
+                            placeholder="0"
+                            required
+                            className="h-12 text-base rounded-2xl border-2 focus:border-primary/50 focus:ring-4 focus:ring-primary/10"
                           />
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="grid gap-3">
-                            <Label htmlFor="product-price" className="text-base font-medium">
-                              Price ($)
-                            </Label>
-                            <Input
-                              id="product-price"
-                              name="price"
-                              type="number"
-                              step="0.01"
-                              defaultValue={editingProduct?.price}
-                              placeholder="0.00"
-                              required
-                              className="h-12 text-base rounded-2xl border-2 focus:border-primary/50 focus:ring-4 focus:ring-primary/10"
-                            />
-                          </div>
-                          <div className="grid gap-3">
-                            <Label htmlFor="product-stock" className="text-base font-medium">
-                              Stock Quantity
-                            </Label>
-                            <Input
-                              id="product-stock"
-                              name="stock_quantity"
-                              type="number"
-                              defaultValue={editingProduct?.stock_quantity}
-                              placeholder="0"
-                              required
-                              className="h-12 text-base rounded-2xl border-2 focus:border-primary/50 focus:ring-4 focus:ring-primary/10"
-                            />
-                          </div>
-                        </div>
-                        <div className="grid gap-3">
-                          <Label htmlFor="product-category" className="text-base font-medium">
-                            Category
-                          </Label>
-                          <Select name="category_id" defaultValue={editingProduct?.category_id}>
-                            <SelectTrigger className="h-12 text-base rounded-2xl border-2">
-                              <SelectValue placeholder="Select a category" />
-                            </SelectTrigger>
-                            <SelectContent className="rounded-2xl">
-                              {categories.map((category) => (
-                                <SelectItem key={category.id} value={category.id} className="text-base">
-                                  {category.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-                          <Button type="submit" className="w-full h-12 text-base font-medium rounded-2xl">
-                            {editingProduct ? "Update Product" : "Add Product"}
-                          </Button>
-                        </motion.div>
-                      </form>
-                    </DialogContent>
-                  </Dialog>
-                </div>
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-                className="grid gap-6"
-              >
-                {/* CHANGE> Added batch inventory actions */}
-                <BatchInventoryActions products={products} onProductsUpdated={loadDashboardData} />
+                      </div>
+                      <div className="grid gap-3">
+                        <Label htmlFor="product-category" className="text-base font-medium">
+                          Category
+                        </Label>
+                        <Select name="category_id" defaultValue={editingProduct?.category_id}>
+                          <SelectTrigger className="h-12 text-base rounded-2xl border-2">
+                            <SelectValue placeholder="Select a category" />
+                          </SelectTrigger>
+                          <SelectContent className="rounded-2xl">
+                            {categories.map((category) => (
+                              <SelectItem key={category.id} value={category.id} className="text-base">
+                                {category.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                        <Button type="submit" className="w-full h-12 text-base font-medium rounded-2xl">
+                          {editingProduct ? "Update Product" : "Add Product"}
+                        </Button>
+                      </motion.div>
+                    </form>
+                  </DialogContent>
+                </Dialog>
               </motion.div>
 
               <motion.div
@@ -892,7 +796,7 @@ export function ShopkeeperDashboard({ user, profile }: { user: User; profile: Pr
                                   }}
                                   className="rounded-2xl border-2 px-4 py-2"
                                 >
-                                  {/* Placeholder for Edit icon */}
+                                  <Edit className="h-4 w-4" />
                                 </Button>
                               </motion.div>
                               <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
@@ -902,7 +806,7 @@ export function ShopkeeperDashboard({ user, profile }: { user: User; profile: Pr
                                   onClick={() => handleDeleteProduct(product.id)}
                                   className="rounded-2xl border-2 px-4 py-2 text-red-600 border-red-200 hover:bg-red-50"
                                 >
-                                  {/* Placeholder for Trash2 icon */}
+                                  <Trash2 className="h-4 w-4" />
                                 </Button>
                               </motion.div>
                             </div>
@@ -915,132 +819,65 @@ export function ShopkeeperDashboard({ user, profile }: { user: User; profile: Pr
               </motion.div>
             </TabsContent>
 
-            <TabsContent value="chat" className="space-y-8">
+            <TabsContent value="settings" className="space-y-8">
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-                <Card className="rounded-2xl border-0 shadow-lg bg-card/60 backdrop-blur-sm mb-6">
+                <Card className="rounded-2xl border-0 shadow-lg bg-card/60 backdrop-blur-sm">
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-2xl">
-                      {/* Placeholder for MessageCircle icon */}
-                      Customer Support
-                    </CardTitle>
-                    <CardDescription className="text-base">
-                      Manage customer inquiries and provide support. Auto-responses handle common questions about hours,
-                      availability, and pricing.
-                    </CardDescription>
+                    <CardTitle className="text-2xl font-bold text-foreground">Shop Settings</CardTitle>
+                    <CardDescription className="text-base">Manage your shop information</CardDescription>
                   </CardHeader>
-                  <CardContent>
-                    <div className="grid gap-4 md:grid-cols-3">
-                      <div className="flex items-center gap-3 p-4 bg-green-50 rounded-2xl border border-green-200">
-                        <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                        <div>
-                          <p className="font-medium text-green-900">Auto-responses active</p>
-                          <p className="text-sm text-green-700">Handling common questions</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3 p-4 bg-blue-50 rounded-2xl border border-blue-200">
-                        {/* Placeholder for Users icon */}
-                        <div>
-                          <p className="font-medium text-blue-900">Quick replies ready</p>
-                          <p className="text-sm text-blue-700">One-tap responses available</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3 p-4 bg-orange-50 rounded-2xl border border-orange-200">
-                        {/* Placeholder for MessageCircle icon */}
-                        <div>
-                          <p className="font-medium text-orange-900">{unreadMessages} unread</p>
-                          <p className="text-sm text-orange-700">Messages waiting for response</p>
-                        </div>
-                      </div>
+                  <CardContent className="space-y-6">
+                    <div className="grid gap-3">
+                      <Label className="text-base font-medium">Shop Name</Label>
+                      <Input value={shop.name} readOnly className="h-12 text-base rounded-2xl border-2 bg-muted/30" />
+                    </div>
+                    <div className="grid gap-3">
+                      <Label className="text-base font-medium">Description</Label>
+                      <Textarea
+                        value={shop.description || ""}
+                        readOnly
+                        className="min-h-24 text-base rounded-2xl border-2 bg-muted/30"
+                      />
+                    </div>
+                    <div className="grid gap-3">
+                      <Label className="text-base font-medium">Address</Label>
+                      <Input
+                        value={shop.address}
+                        readOnly
+                        className="h-12 text-base rounded-2xl border-2 bg-muted/30"
+                      />
+                    </div>
+                    <div className="grid gap-3">
+                      <Label className="text-base font-medium">Phone</Label>
+                      <Input
+                        value={shop.phone || ""}
+                        readOnly
+                        className="h-12 text-base rounded-2xl border-2 bg-muted/30"
+                      />
+                    </div>
+                    <div className="grid gap-3">
+                      <Label className="text-base font-medium">Shop ID</Label>
+                      <Input
+                        value={shop.id}
+                        readOnly
+                        className="h-12 text-base rounded-2xl border-2 bg-muted/30 font-mono"
+                      />
+                      <p className="text-base text-muted-foreground text-pretty">
+                        Share this ID with customers for manual purchase tracking
+                      </p>
+                    </div>
+                    <div className="p-6 bg-muted/20 rounded-2xl border-2 border-dashed">
+                      <p className="text-base text-muted-foreground text-pretty">
+                        Shop settings editing will be available in a future update.
+                      </p>
                     </div>
                   </CardContent>
                 </Card>
-
-                <ChatList isCustomer={false} currentUserId={user.id} />
-              </motion.div>
-            </TabsContent>
-
-            <TabsContent value="settings" className="space-y-8">
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-                <div className="grid gap-8 lg:grid-cols-2">
-                  <Card className="rounded-2xl border-0 shadow-lg bg-card/60 backdrop-blur-sm">
-                    <CardHeader>
-                      <CardTitle className="text-2xl font-bold text-foreground">{t("shopSettings")}</CardTitle>
-                      <CardDescription className="text-base">Manage your shop information</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                      <div className="grid gap-3">
-                        <Label className="text-base font-medium">{t("shopName")}</Label>
-                        <Input value={shop.name} readOnly className="h-12 text-base rounded-2xl border-2 bg-muted/30" />
-                      </div>
-                      <div className="grid gap-3">
-                        <Label className="text-base font-medium">{t("description")}</Label>
-                        <Textarea
-                          value={shop.description || ""}
-                          readOnly
-                          className="min-h-24 text-base rounded-2xl border-2 bg-muted/30"
-                        />
-                      </div>
-                      <div className="grid gap-3">
-                        <Label className="text-base font-medium">{t("address")}</Label>
-                        <Input
-                          value={shop.address}
-                          readOnly
-                          className="h-12 text-base rounded-2xl border-2 bg-muted/30"
-                        />
-                      </div>
-                      <div className="grid gap-3">
-                        <Label className="text-base font-medium">{t("phone")}</Label>
-                        <Input
-                          value={shop.phone || ""}
-                          readOnly
-                          className="h-12 text-base rounded-2xl border-2 bg-muted/30"
-                        />
-                      </div>
-                      <div className="grid gap-3">
-                        <Label className="text-base font-medium">Shop ID</Label>
-                        <Input
-                          value={shop.id}
-                          readOnly
-                          className="h-12 text-base rounded-2xl border-2 bg-muted/30 font-mono"
-                        />
-                        <p className="text-base text-muted-foreground text-pretty">
-                          Share this ID with customers for manual purchase tracking
-                        </p>
-                      </div>
-                      <div className="p-6 bg-muted/20 rounded-2xl border-2 border-dashed">
-                        <p className="text-base text-muted-foreground text-pretty">
-                          Shop settings editing will be available in a future update.
-                        </p>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* CHANGE> Added language selector */}
-                  <Card className="rounded-2xl border-0 shadow-lg bg-card/60 backdrop-blur-sm">
-                    <CardHeader>
-                      <CardTitle className="text-2xl font-bold text-foreground">Language Settings</CardTitle>
-                      <CardDescription className="text-base">Choose your preferred language</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <LanguageSelector currentLanguage={language} onLanguageChange={changeLanguage} />
-                    </CardContent>
-                  </Card>
-                </div>
-
-                {/* CHANGE> Added CSV export section */}
-                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
-                  <CSVExport
-                    products={products}
-                    backInStockRequests={loadBackInStockRequests()} // Use the imported function
-                    shopName={shop.name}
-                  />
-                </motion.div>
               </motion.div>
             </TabsContent>
           </Tabs>
         </motion.div>
       </div>
-      {shop && <FloatingShopToggle shop={shop} onToggle={handleShopToggle} />}
     </div>
   )
 }
