@@ -1,5 +1,6 @@
 "use client"
 
+import { cn } from "@/lib/utils"
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
@@ -24,6 +25,7 @@ import { Store, Package, Plus, Edit, Trash2, TrendingUp, LogOut, Bell } from "lu
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { motion, AnimatePresence } from "framer-motion"
+import { formatDistanceToNow } from "date-fns"
 
 interface Profile {
   id: string
@@ -45,6 +47,7 @@ interface Shop {
   phone: string
   is_open: boolean
   image_url: string
+  last_status_change?: string
 }
 
 interface Product {
@@ -149,23 +152,18 @@ export function ShopkeeperDashboard({ user, profile }: { user: User; profile: Pr
 
   const loadDashboardData = async () => {
     try {
-      // Load shop
       const { data: shopData } = await supabase.from("shops").select("*").eq("owner_id", user.id).single()
-
       setShop(shopData)
 
-      // Load categories
       const { data: categoriesData } = await supabase.from("categories").select("*").order("name")
-
       setCategories(categoriesData || [])
 
-      // Load products if shop exists
       if (shopData) {
         const { data: productsData } = await supabase
           .from("products")
           .select(`
             *,
-            categories (name)
+            categories(name)
           `)
           .eq("shop_id", shopData.id)
           .order("name")
@@ -198,18 +196,19 @@ export function ShopkeeperDashboard({ user, profile }: { user: User; profile: Pr
     }
   }
 
-  const handleShopToggle = async (isOpen: boolean) => {
+  const handleShopToggle = async () => {
     if (!shop) return
+    const newStatus = !shop.is_open
 
     try {
-      const { error } = await supabase.from("shops").update({ is_open: isOpen }).eq("id", shop.id)
+      const { error } = await supabase.from("shops").update({ is_open: newStatus, last_status_change: new Date().toISOString() }).eq("id", shop.id)
 
       if (error) throw error
 
-      setShop({ ...shop, is_open: isOpen })
+      setShop({ ...shop, is_open: newStatus, last_status_change: new Date().toISOString() })
       toast({
         title: "Shop Status Updated",
-        description: `Your shop is now ${isOpen ? "open" : "closed"}`,
+        description: `Your shop is now ${newStatus ? "open" : "closed"}`,
       })
     } catch (error) {
       console.error("Error updating shop status:", error)
@@ -753,7 +752,7 @@ export function ShopkeeperDashboard({ user, profile }: { user: User; profile: Pr
                         {editingProduct ? "Update product details" : "Add a new product to your inventory"}
                       </DialogDescription>
                     </DialogHeader>
-                    <form action={editingProduct ? handleUpdateProduct : handleCreateProduct} className="space-y-6">
+                  <form onSubmit={editingProduct ? handleUpdateProduct : handleCreateProduct} className="space-y-6">
                       <div className="grid gap-3">
                         <Label htmlFor="product-name" className="text-base font-medium">
                           Product Name
