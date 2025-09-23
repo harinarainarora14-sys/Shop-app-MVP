@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
 import { QrCode, ArrowLeft, DollarSign, Receipt } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { QRScannerVideo } from "./qr-scanner-video"
 
 interface User {
   id: string
@@ -23,9 +24,96 @@ export function QRScanner({ user }: { user: User }) {
   const [description, setDescription] = useState("")
   const [shopId, setShopId] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [isScanning, setIsScanning] = useState(false)
   const { toast } = useToast()
   const router = useRouter()
   const supabase = createClient()
+
+  const handleScan = async (result: string) => {
+    try {
+      // Stop scanning after successful scan
+      setIsScanning(false)
+
+      // Expected QR format: shopId|amount|description
+      const [scannedShopId, scannedAmount, scannedDescription] = result.split("|")
+      
+      if (!scannedShopId || !scannedAmount) {
+        throw new Error("Invalid QR code format")
+      }
+
+      // Get detailed shop information
+      const { data: shop } = await supabase
+        .from("shops")
+        .select(`
+          id,
+          name,
+          description,
+          address,
+          phone,
+          is_open,
+          image_url
+        `)
+        .eq("id", scannedShopId)
+        .single()
+
+      if (!shop) {
+        throw new Error("Shop not found")
+      }
+
+      // Set form values from scan
+      setShopId(scannedShopId)
+      setAmount(scannedAmount)
+      if (scannedDescription) {
+        setDescription(scannedDescription)
+      }
+
+      // Show shop profile card
+      toast({
+        title: (
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+              <Store className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <div className="font-semibold">{shop.name}</div>
+              <div className="text-sm text-muted-foreground">{shop.address}</div>
+            </div>
+          </div>
+        ),
+        description: (
+          <div className="mt-2 space-y-2">
+            <Badge variant={shop.is_open ? "default" : "secondary"} className="text-xs">
+              {shop.is_open ? "Open Now" : "Closed"}
+            </Badge>
+            <p className="text-sm">{shop.description}</p>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="w-full mt-2"
+              onClick={() => router.push(`/shop/${shop.id}`)}
+            >
+              View Shop Details
+            </Button>
+          </div>
+        ),
+      })
+    } catch (error) {
+      toast({
+        title: "Invalid QR Code",
+        description: "Please try scanning again or use manual entry",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleScanError = (error: string) => {
+    toast({
+      title: "Scanner Error",
+      description: error,
+      variant: "destructive",
+    })
+    setIsScanning(false)
+  }
 
   const handleManualEntry = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -94,34 +182,46 @@ export function QRScanner({ user }: { user: User }) {
 
       <div className="p-6 space-y-6">
         {/* QR Scanner Placeholder */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+      <Card className="mx-auto max-w-sm">
+        <CardHeader className="flex flex-row items-center gap-3">
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2">
               <QrCode className="h-5 w-5" />
               QR Code Scanner
-            </CardTitle>
+            </div>
             <CardDescription>Scan shop QR codes to automatically log purchases</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="text-center py-12 border-2 border-dashed border-muted-foreground/25 rounded-lg">
-              <QrCode className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-              <p className="text-muted-foreground mb-2">QR Scanner Coming Soon</p>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {isScanning ? (
+            <div className="flex flex-col items-center gap-4">
+              <QRScannerVideo onScan={handleScan} onError={handleScanError} />
+              <Button variant="outline" onClick={() => setIsScanning(false)}>
+                Cancel Scan
+              </Button>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-4 py-6">
+              <Button className="w-full" onClick={() => setIsScanning(true)}>
+                <QrCode className="h-5 w-5 mr-2" />
+                Start Camera Scan
+              </Button>
               <p className="text-sm text-muted-foreground">
-                Camera-based QR scanning will be available in a future update
+                Position the QR code within the frame to scan
               </p>
             </div>
-          </CardContent>
-        </Card>
+          )}
+        </CardContent>
+      </Card>
 
-        {/* Manual Entry */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Receipt className="h-5 w-5" />
-              Manual Entry
-            </CardTitle>
-            <CardDescription>Manually log your purchases for now</CardDescription>
-          </CardHeader>
+      <Card className="mx-auto max-w-sm mt-6">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Receipt className="h-5 w-5" />
+            Manual Entry
+          </CardTitle>
+          <CardDescription>Enter purchase details manually</CardDescription>
+        </CardHeader>
           <CardContent>
             <form onSubmit={handleManualEntry} className="space-y-4">
               <div className="grid gap-2">

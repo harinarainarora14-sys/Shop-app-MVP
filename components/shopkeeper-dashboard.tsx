@@ -71,10 +71,76 @@ export function ShopkeeperDashboard({ user, profile }: { user: User; profile: Pr
   const [showShopForm, setShowShopForm] = useState(false)
   const [showProductForm, setShowProductForm] = useState(false)
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
+  const [selectedProducts, setSelectedProducts] = useState<string[]>([])
   const [unreadNotifications, setUnreadNotifications] = useState(0)
+  const [showTemplates, setShowTemplates] = useState(false)
   const { toast } = useToast()
   const router = useRouter()
   const supabase = createClient()
+
+  const productTemplates = [
+    { name: "Bread", description: "Fresh bread", price: 2.99, category_id: "bakery", stock_quantity: 50 },
+    { name: "Milk", description: "1 gallon", price: 3.99, category_id: "dairy", stock_quantity: 30 },
+    { name: "Eggs", description: "1 dozen", price: 4.99, category_id: "dairy", stock_quantity: 40 }
+  ]
+
+  const handleBatchDelete = async () => {
+    if (selectedProducts.length === 0) return
+
+    try {
+      const { error } = await supabase
+        .from("products")
+        .delete()
+        .in("id", selectedProducts)
+
+      if (error) throw error
+
+      setProducts(products.filter(p => !selectedProducts.includes(p.id)))
+      setSelectedProducts([])
+      
+      toast({
+        title: "Products Deleted",
+        description: `${selectedProducts.length} products have been deleted`,
+      })
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete products",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleBatchToggleAvailability = async (makeAvailable: boolean) => {
+    if (selectedProducts.length === 0) return
+
+    try {
+      const { error } = await supabase
+        .from("products")
+        .update({ is_available: makeAvailable })
+        .in("id", selectedProducts)
+
+      if (error) throw error
+
+      setProducts(products.map(p => 
+        selectedProducts.includes(p.id) 
+          ? { ...p, is_available: makeAvailable }
+          : p
+      ))
+      setSelectedProducts([])
+
+      toast({
+        title: "Products Updated",
+        description: `${selectedProducts.length} products have been ${makeAvailable ? "made available" : "marked as unavailable"}`,
+      })
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to update products",
+        variant: "destructive",
+      })
+    }
+  }
 
   useEffect(() => {
     loadDashboardData()
@@ -461,17 +527,41 @@ export function ShopkeeperDashboard({ user, profile }: { user: User; profile: Pr
                 </Link>
               </Button>
             </motion.div>
-            <div className="flex items-center gap-3 bg-muted/30 rounded-2xl px-4 py-2 border">
-              <Label htmlFor="shop-status" className="text-base font-medium">
-                {shop.is_open ? "Open" : "Closed"}
-              </Label>
-              <Switch
-                id="shop-status"
-                checked={shop.is_open}
-                onCheckedChange={handleShopToggle}
-                className="data-[state=checked]:bg-emerald-500"
-              />
-            </div>
+            {/* Floating Shop Status Button */}
+            <motion.div 
+              className="fixed bottom-6 right-6 z-50"
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+            >
+              <Button
+                size="lg"
+                onClick={handleShopToggle}
+                className={cn(
+                  "h-16 px-6 rounded-full shadow-lg transition-all duration-300",
+                  shop.is_open 
+                    ? "bg-emerald-500 hover:bg-emerald-600" 
+                    : "bg-red-500 hover:bg-red-600"
+                )}
+              >
+                <motion.div 
+                  className="flex items-center gap-3"
+                  animate={{ 
+                    scale: [1, 1.1, 1],
+                    transition: { duration: 0.3 }
+                  }}
+                >
+                  <Store className="h-5 w-5" />
+                  <span className="font-medium">
+                    {shop.is_open ? "Open" : "Closed"}
+                  </span>
+                  <span className="text-sm opacity-80">
+                    • {formatDistanceToNow(new Date(shop.last_status_change || new Date()), { addSuffix: true })}
+                  </span>
+                </motion.div>
+              </Button>
+            </motion.div>
             <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
               <Button variant="outline" onClick={handleSignOut} className="rounded-2xl border-2 bg-transparent">
                 <LogOut className="h-4 w-4 mr-2" />
