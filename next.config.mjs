@@ -9,6 +9,12 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  experimental: {
+    // Add this to help with build issues
+    optimizePackageImports: ['lucide-react'],
+  },
+  // Add output config for static builds
+  output: 'standalone',
 }
 
 export default nextConfig
