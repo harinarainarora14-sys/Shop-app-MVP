@@ -1,7 +1,8 @@
 "use client"
 
 import type React from "react"
-
+import { Store } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
 import { useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
